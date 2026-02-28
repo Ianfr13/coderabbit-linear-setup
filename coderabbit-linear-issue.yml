@@ -75,8 +75,6 @@ jobs:
             core.info(`Monitorando comentário #${commentId} no PR #${prNumber}...`);
 
             while (Date.now() - startTime < MAX_WAIT) {
-              await new Promise(r => setTimeout(r, POLL_INTERVAL));
-
               const { data: comment } = await github.rest.issues.getComment({
                 owner, repo,
                 comment_id: commentId,
@@ -99,6 +97,7 @@ jobs:
               }
 
               lastBody = currentBody;
+              await new Promise(r => setTimeout(r, POLL_INTERVAL));
             }
 
             if (!stableBody) {
@@ -135,6 +134,7 @@ jobs:
             // ─── 3. Deduplicação ───────────────────────────────────────
             let page = 1;
             let alreadyCreated = false;
+            const allComments = [];
 
             while (true) {
               const { data: comments } = await github.rest.issues.listComments({
@@ -145,10 +145,11 @@ jobs:
               });
 
               if (comments.length === 0) break;
+              allComments.push(...comments);
 
               alreadyCreated = comments.some(c =>
                 c.user.login === 'github-actions[bot]' &&
-                c.body.includes('<!-- linear-issue-created -->')
+                c.body.includes(`<!-- linear-issue-for-comment-${commentId} -->`)
               );
 
               if (alreadyCreated) break;
@@ -160,6 +161,32 @@ jobs:
               core.info('Issue já criado nesse PR. Pulando.');
               return;
             }
+
+            // ─── Contagem de ciclos ──────────────────────────────────
+            const previousCycles = allComments.filter(c =>
+              c.user.login === 'github-actions[bot]' &&
+              /<!-- linear-issue-for-comment-\d+ -->/.test(c.body)
+            ).length;
+
+            const currentCycle = previousCycles + 1;
+            const MAX_CYCLES = 5;
+
+            if (currentCycle > MAX_CYCLES) {
+              core.warning(`PR #${prNumber} atingiu o limite de ${MAX_CYCLES} ciclos de review. Intervenção manual necessária.`);
+              await github.rest.issues.createComment({
+                owner, repo,
+                issue_number: prNumber,
+                body: [
+                  `### ⚠️ Limite de Ciclos Atingido`,
+                  '',
+                  `Este PR passou por **${MAX_CYCLES} ciclos** de review automático sem resolver todos os findings.`,
+                  `Intervenção manual é necessária.`,
+                ].join('\n'),
+              });
+              return;
+            }
+
+            core.info(`Ciclo de review: ${currentCycle}/${MAX_CYCLES}`);
 
             // ─── 4. Contexto do PR ─────────────────────────────────────
             const { data: pr } = await github.rest.pulls.get({
@@ -237,19 +264,32 @@ jobs:
             // ─── 7. Encontrar ou criar labels no Linear ───────────────
             const labelIds = [];
 
+            // Cores para labels no Linear
+            const linearLabelColors = {
+              'warning': '#F59E0B',
+              'critical': '#DC2626',
+              'changes-requested': '#EA580C',
+              'needs-attention': '#F97316',
+              'security': '#DC2626',
+              'bug': '#EF4444',
+              'performance': '#F59E0B',
+            };
+
             for (const signal of signals) {
               const labelName = signal.charAt(0).toUpperCase() + signal.slice(1);
               let linearLabel = linearLabels.find(l => l.name.toLowerCase() === signal.toLowerCase());
 
+              const labelColor = linearLabelColors[signal] || '#6B7280';
+
               if (!linearLabel) {
                 try {
                   const created = await linearQuery(`
-                    mutation($teamId: String!, $name: String!) {
-                      issueLabelCreate(input: { teamId: $teamId, name: $name }) {
+                    mutation($teamId: String!, $name: String!, $color: String) {
+                      issueLabelCreate(input: { teamId: $teamId, name: $name, color: $color }) {
                         issueLabel { id name }
                       }
                     }
-                  `, { teamId: LINEAR_TEAM_ID, name: labelName });
+                  `, { teamId: LINEAR_TEAM_ID, name: labelName, color: labelColor });
                   linearLabel = created.issueLabelCreate.issueLabel;
                 } catch (e) {
                   core.warning(`Não foi possível criar label "${labelName}": ${e.message}`);
@@ -333,7 +373,7 @@ jobs:
 
             // ─── 9. Comentar no PR com link do issue ───────────────────
             const prComment = [
-              `<!-- linear-issue-created -->`,
+              `<!-- linear-issue-for-comment-${commentId} -->`,
               `<!-- linear-issue-id:${issue.id} -->`,
               `<!-- linear-issue-identifier:${issue.identifier} -->`,
               '',
@@ -342,6 +382,7 @@ jobs:
               `| Campo | Valor |`,
               `|-------|-------|`,
               `| **Issue** | [${issue.identifier}](${issue.url}) |`,
+              `| **Ciclo** | ${currentCycle}/${MAX_CYCLES} |`,
               `| **Status** | ${triageState.name} |`,
               `| **Prioridade** | ${severity} |`,
               `| **Score** | ${score} |`,

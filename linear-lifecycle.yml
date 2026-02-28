@@ -79,6 +79,12 @@ jobs:
               } else if (reviewState === 'changes_requested') {
                 targetState = 'in_progress';
               }
+
+              // Se CodeRabbit postou novo review, mover para In Review
+              if (context.payload.review.user.login === 'coderabbitai[bot]' &&
+                  reviewState === 'commented') {
+                targetState = 'in_review';
+              }
             }
 
             if (!targetState) {
@@ -110,13 +116,11 @@ jobs:
                 const identifierMatch = c.body.match(/<!-- linear-issue-identifier:([A-Z]+-\d+) -->/);
 
                 if (idMatch) {
+                  // Sempre pegar o mais recente (último ciclo)
                   linearIssueId = idMatch[1];
                   linearIdentifier = identifierMatch ? identifierMatch[1] : null;
-                  break;
                 }
               }
-
-              if (linearIssueId) break;
               if (comments.length < 100) break;
               page++;
             }

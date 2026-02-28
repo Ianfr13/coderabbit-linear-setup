@@ -16,18 +16,21 @@ PR avança → Issue move automaticamente → PR merged → Issue Done
 2. **Polling inteligente** — Monitora a cada 60s até o review estabilizar (máx 15 min)
 3. **Análise por score** — Avalia findings com pontuação ponderada. Score >= 3 cria issue
 4. **Labels GitHub** — Aplica labels automáticas no PR (security, bug, performance, severity)
-5. **Issue no Linear** — Cria via API com título, descrição, prioridade, labels, projeto e status inicial (Triage)
+5. **Issue no Linear** — Cria via API com título, descrição, prioridade, labels coloridas, projeto e status inicial (Triage)
 6. **Lifecycle sync** — Acompanha o PR e atualiza o issue no Linear automaticamente:
 
 | Evento no PR | Status no Linear |
 |---|---|
 | PR aberto / reaberto | In Progress |
+| CodeRabbit postou review | **In Review** |
 | Review com changes requested | In Progress |
 | Review aprovado | **Ready to Merge** |
 | PR merged | Done (com comentário) |
 | PR fechado sem merge | Cancelled (com motivo) |
 
-7. **Repos novos** — Qualquer repo novo criado na sua conta recebe os workflows automaticamente
+7. **Ciclos de fix** — Cada re-review do CodeRabbit pode criar um novo issue (até 5 ciclos por PR)
+8. **Repos novos** — Qualquer repo novo criado na sua conta recebe os workflows automaticamente
+9. **Merge conflicts** — Resolução automática de conflitos com git strategies + AI fallback
 
 ### Detecção de Findings
 
@@ -126,6 +129,7 @@ Variáveis de ambiente nos workflows:
 | `POLL_INTERVAL` | `60` | issue | Segundos entre cada check |
 | `MAX_WAIT` | `900` | issue | Tempo máximo de polling (15 min) |
 | `MIN_WALKTHROUGH_LENGTH` | `3000` | issue | Chars mínimos para bônus |
+| `MAX_CYCLES` | `5` | issue | Máximo de ciclos review→fix por PR |
 
 ## Estrutura
 

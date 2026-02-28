@@ -14,11 +14,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 CONFIG="$ROOT_DIR/repos.json"
 
-# Workflows para sincronizar
-WORKFLOW_FILES=(
-  "coderabbit-linear-issue.yml"
-  "linear-lifecycle.yml"
-)
+# Ler workflows de repos.json
+mapfile -t WORKFLOW_FILES < <(jq -r '.workflows[]' "$CONFIG")
 REMOTE_PATH=".github/workflows"
 
 # Cores

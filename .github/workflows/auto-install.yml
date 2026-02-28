@@ -31,17 +31,11 @@ jobs:
             const owner = config.owner;
             const knownRepos = new Set(config.repos.map(r => r.name));
 
-            // Workflows para instalar
-            const workflows = [
-              {
-                local: 'coderabbit-linear-issue.yml',
-                remote: '.github/workflows/coderabbit-linear-issue.yml',
-              },
-              {
-                local: 'linear-lifecycle.yml',
-                remote: '.github/workflows/linear-lifecycle.yml',
-              },
-            ];
+            // Workflows para instalar (lidos de repos.json)
+            const workflows = config.workflows.map(name => ({
+              local: name,
+              remote: `.github/workflows/${name}`,
+            }));
 
             // Repos para ignorar (este repo, forks, archived)
             const IGNORE_REPOS = new Set([
