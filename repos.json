@@ -1,0 +1,24 @@
+{
+  "owner": "Ianfr13",
+  "workflows": [
+    "coderabbit-linear-issue.yml",
+    "linear-lifecycle.yml"
+  ],
+  "repos": [
+    { "name": "sales-brain", "note": "Origem" },
+    { "name": "creative-studio" },
+    { "name": "Axon.MCP.Server" },
+    { "name": "mcp-router" },
+    { "name": "brain-crm" },
+    { "name": "claude-brain" },
+    { "name": "ai-manus" },
+    { "name": "code-workflow" },
+    { "name": "ad-radar" },
+    { "name": "video-downloader" },
+    { "name": "traffic-manager-plugin" },
+    { "name": "media-forge" },
+    { "name": "douravita-social-engine" },
+    { "name": "dashboard-metas-vendas" },
+    { "name": "agrovio-ia" }
+  ]
+}

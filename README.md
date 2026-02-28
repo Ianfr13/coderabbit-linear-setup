@@ -1,125 +1,155 @@
-# CodeRabbit → Linear Issue (Auto Setup)
+# CodeRabbit → Linear (Full Automation)
 
-Workflow do GitHub Actions que automatiza a criação de issues no Linear a partir dos reviews do CodeRabbit.
+Pipeline completo que conecta code reviews do CodeRabbit ao Linear com gerenciamento automático de issues. Zero intervenção — configure uma vez e tudo roda sozinho pra sempre, incluindo repos novos.
 
 ## Como Funciona
 
 ```
-PR aberto → CodeRabbit faz review → Walkthrough postado →
-GitHub Actions detecta → Aguarda 10min → Analisa findings →
-Comenta pedindo issue consolidado → CodeRabbit cria issue no Linear
+PR aberto → CodeRabbit review → Polling até estabilizar →
+Análise por score → Labels no PR → Issue criado no Linear (Triage) →
+PR avança → Issue move automaticamente → PR merged → Issue Done
 ```
 
-### Fluxo detalhado
+### Pipeline Completo
 
-1. **Trigger**: CodeRabbit posta/edita um comentário com `walkthrough_start` em um PR
-2. **Espera**: Aguarda 10 minutos para o review completo ser finalizado
-3. **Filtragem**: Verifica se há findings significativos (⚠️, 🔴, changes requested, etc.)
-4. **Deduplicação**: Checa se já foi solicitado um issue nesse PR (evita duplicatas)
-5. **Ação**: Posta um comentário pedindo ao CodeRabbit para criar UM issue consolidado no Linear com todos os findings
+1. **Trigger** — CodeRabbit posta walkthrough em um PR
+2. **Polling inteligente** — Monitora a cada 60s até o review estabilizar (máx 15 min)
+3. **Análise por score** — Avalia findings com pontuação ponderada. Score >= 3 cria issue
+4. **Labels GitHub** — Aplica labels automáticas no PR (security, bug, performance, severity)
+5. **Issue no Linear** — Cria via API com título, descrição, prioridade, labels, projeto e status inicial (Triage)
+6. **Lifecycle sync** — Acompanha o PR e atualiza o issue no Linear automaticamente:
 
-## Setup Rápido
-
-### 1. Copiar o Workflow
-
-Copie o arquivo [`coderabbit-linear-issue.yml`](./coderabbit-linear-issue.yml) para `.github/workflows/` no seu repositório.
-
-### 2. Configurar PAT_TOKEN
-
-O workflow usa um **Personal Access Token** (não o GITHUB_TOKEN padrão) para ter permissão de comentar em PRs e triggerar outros workflows.
-
-1. Vá em [github.com/settings/tokens](https://github.com/settings/tokens)
-2. Crie um **Fine-grained token** com:
-   - **Repository access**: Todos os repos que usarão o workflow
-   - **Permissions**:
-     - `Issues`: Read and Write
-     - `Pull requests`: Read and Write
-     - `Contents`: Read
-3. No repositório, vá em **Settings → Secrets and variables → Actions**
-4. Crie um secret chamado `PAT_TOKEN` com o token gerado
-
-### 3. Configurar CodeRabbit
-
-Certifique-se de que o [CodeRabbit](https://coderabbit.ai) está instalado e configurado no repositório. O workflow depende do bot `coderabbitai[bot]` postar comentários de walkthrough.
-
-### 4. Configurar Linear Integration no CodeRabbit
-
-Para que o CodeRabbit possa criar issues no Linear:
-1. Acesse o [dashboard do CodeRabbit](https://app.coderabbit.ai)
-2. Conecte sua conta do Linear
-3. Configure o projeto/time onde os issues serão criados
-
-## Instalação via API (Automático)
-
-Para adicionar o workflow a um repo via CLI:
-
-```bash
-# Encode o arquivo
-CONTENT=$(base64 < coderabbit-linear-issue.yml)
-
-# Push para o repo
-gh api "repos/OWNER/REPO/contents/.github/workflows/coderabbit-linear-issue.yml" \
-  --method PUT \
-  --field message="ci: add CodeRabbit → Linear auto-issue workflow" \
-  --field content="$CONTENT"
-```
-
-Para atualizar um repo que já tem o workflow:
-
-```bash
-# Pegar SHA atual
-SHA=$(gh api "repos/OWNER/REPO/contents/.github/workflows/coderabbit-linear-issue.yml" --jq '.sha')
-CONTENT=$(base64 < coderabbit-linear-issue.yml)
-
-# Update
-gh api "repos/OWNER/REPO/contents/.github/workflows/coderabbit-linear-issue.yml" \
-  --method PUT \
-  --field message="ci: update CodeRabbit → Linear workflow" \
-  --field content="$CONTENT" \
-  --field sha="$SHA"
-```
-
-## Repos com o Workflow Instalado
-
-| Repositório | Status |
+| Evento no PR | Status no Linear |
 |---|---|
-| sales-brain | ✅ Origem (latest) |
-| creative-studio | ✅ Atualizado |
-| Axon.MCP.Server | ✅ Instalado |
-| mcp-router | ✅ Instalado |
-| brain-crm | ✅ Instalado |
-| claude-brain | ✅ Instalado |
-| ai-manus | ✅ Instalado |
-| code-workflow | ✅ Instalado |
-| ad-radar | ✅ Instalado |
-| video-downloader | ✅ Instalado |
-| traffic-manager-plugin | ✅ Instalado |
-| media-forge | ✅ Instalado |
-| douravita-social-engine | ✅ Instalado |
-| dashboard-metas-vendas | ✅ Instalado |
-| agrovio-ia | ✅ Instalado |
+| PR aberto / reaberto | In Progress |
+| Review com changes requested | In Progress |
+| Review aprovado | In Review |
+| PR merged | Done (com comentário) |
+| PR fechado sem merge | Cancelled (com motivo) |
 
-## Personalização
+7. **Repos novos** — Qualquer repo novo criado na sua conta recebe os workflows automaticamente
 
-### Tempo de espera
+### Detecção de Findings
 
-O `sleep 600` (10 minutos) pode ser ajustado. É o tempo para o CodeRabbit finalizar o review completo antes de analisar os findings.
+| Sinal | Score | Exemplos |
+|-------|-------|----------|
+| Segurança | +5 | security, vulnerability, injection, xss, csrf |
+| Crítico | +5 | emoji 🔴 |
+| Changes requested | +4 | "Changes requested" no walkthrough |
+| Alerta | +3 | emoji ⚠️, "needs attention" |
+| Bug potencial | +3 | bug, error, crash, exception |
+| Performance | +2 | memory leak, N+1, slow |
+| Tamanho (bônus) | +1 | walkthrough > 3000 chars (só com outros sinais) |
 
-### Critérios de findings
+### Labels Automáticas no PR
 
-Atualmente detecta findings por:
-- Emojis de alerta: ⚠️, 🔴
-- Texto: "Changes requested", "needs attention"
-- Tamanho do walkthrough: > 2000 caracteres
+| Label | Quando | Cor |
+|-------|--------|-----|
+| `coderabbit-review` | Sempre | Roxo |
+| `security` | Vulnerabilidade detectada | Vermelho |
+| `bug` | Bug/error/crash | Vermelho claro |
+| `performance` | Memory leak, N+1, slow | Amarelo |
+| `critical` | Emoji 🔴 | Vermelho escuro |
+| `changes-requested` | Changes requested | Laranja |
+| `severity:urgent/high/medium` | Baseado no score | Gradiente |
 
-Edite a seção `hasFindings` no workflow para ajustar.
+### Issue no Linear
+
+O issue é criado diretamente via API com:
+- Título: `[CodeRabbit] repo#PR: título do PR`
+- Descrição: repo, PR link, branch, autor, arquivos alterados, checklist
+- Prioridade: Urgent (score>=8), High (score>=5), Medium (score>=3)
+- Labels: baseadas nos sinais detectados (Security, Bug, Performance, etc.)
+- Projeto: atribuído automaticamente se `LINEAR_PROJECT_ID` configurado
+- Status: Triage → In Progress → In Review → Done (automático)
+
+## Setup (uma vez)
+
+### 1. Secrets necessários
+
+Configure em **cada repo** ou use o auto-sync (recomendado):
+
+| Secret | Onde criar | Descrição |
+|--------|-----------|-----------|
+| `PAT_TOKEN` | [GitHub Tokens](https://github.com/settings/tokens) | Fine-grained: Issues + PRs + Contents (Read/Write) |
+| `LINEAR_API_KEY` | [Linear Settings → API](https://linear.app/settings/api) | Personal API key |
+| `LINEAR_TEAM_ID` | Linear → Settings → Team | ID do time (UUID) |
+| `LINEAR_PROJECT_ID` | Linear → Project → Settings | ID do projeto (opcional) |
+
+### 2. CodeRabbit + Linear
+
+1. Instale o [CodeRabbit](https://coderabbit.ai) nos repos
+2. No [dashboard do CodeRabbit](https://app.coderabbit.ai), conecte o Linear
+
+### 3. Deploy
+
+**Automático (recomendado):** Faça push neste repo → workflows deployados em todos os repos de `repos.json`.
+
+**Repos novos:** O workflow `auto-install.yml` detecta repos criados e instala tudo automaticamente.
+
+**Manual:**
+```bash
+./scripts/sync.sh              # Deploy em todos
+./scripts/sync.sh --check      # Verificar status
+./scripts/sync.sh --dry-run    # Preview
+./scripts/sync.sh repo1 repo2  # Repos específicos
+```
+
+## Repos Monitorados
+
+Editável em [`repos.json`](./repos.json). Para adicionar: edite e faça push.
+
+| Repositório |
+|---|
+| sales-brain |
+| creative-studio |
+| Axon.MCP.Server |
+| mcp-router |
+| brain-crm |
+| claude-brain |
+| ai-manus |
+| code-workflow |
+| ad-radar |
+| video-downloader |
+| traffic-manager-plugin |
+| media-forge |
+| douravita-social-engine |
+| dashboard-metas-vendas |
+| agrovio-ia |
+
+## Configuração
+
+Variáveis de ambiente nos workflows:
+
+| Variável | Default | Workflow | Descrição |
+|----------|---------|---------|-----------|
+| `POLL_INTERVAL` | `60` | issue | Segundos entre cada check |
+| `MAX_WAIT` | `900` | issue | Tempo máximo de polling (15 min) |
+| `MIN_WALKTHROUGH_LENGTH` | `3000` | issue | Chars mínimos para bônus |
+
+## Estrutura
+
+```
+├── coderabbit-linear-issue.yml    # Workflow: review → issue no Linear
+├── linear-lifecycle.yml           # Workflow: PR events → status no Linear
+├── repos.json                     # Lista de repos monitorados
+├── scripts/
+│   └── sync.sh                    # Deploy manual via CLI
+├── .github/workflows/
+│   ├── auto-sync.yml              # Auto-deploy quando faz push aqui
+│   └── auto-install.yml           # Instala em repos novos automaticamente
+└── README.md
+```
 
 ## Troubleshooting
 
 | Problema | Solução |
-|---|---|
-| Workflow não triggera | Verifique se CodeRabbit está postando comentários com `walkthrough_start` |
-| Erro de permissão | Verifique se `PAT_TOKEN` tem permissões corretas |
-| Issue duplicado | O workflow já tem proteção contra duplicatas |
-| Review incompleto | Aumente o `sleep` se o CodeRabbit demora mais de 10min |
-| Linear não conectado | Configure a integração Linear no dashboard do CodeRabbit |
+|----------|---------|
+| Workflow não roda | Verifique se CodeRabbit está ativo e postando `walkthrough_start` |
+| Nenhum issue criado | Score < 3 — verifique logs do Actions (score e sinais são logados) |
+| Erro de permissão GitHub | Recrie `PAT_TOKEN` com Issues + PRs + Contents |
+| Erro Linear API | Verifique `LINEAR_API_KEY` e `LINEAR_TEAM_ID` nos secrets |
+| Issue não muda de status | Verifique se `linear-lifecycle.yml` está instalado no repo |
+| Status não encontrado | Os nomes dos states do Linear devem incluir "In Progress", "In Review", "Done" |
+| Auto-install não funciona | Precisa de webhook `repository` configurado (veja auto-install.yml) |
+| Labels não criando no Linear | Verifique se a API key tem permissão de criar labels no time |

@@ -1,0 +1,165 @@
+name: Auto-Install em Repos Novos
+
+# Verifica periodicamente se existem repos novos na conta
+# que ainda não têm os workflows instalados. Se encontrar,
+# instala automaticamente e atualiza repos.json.
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'  # A cada 6 horas
+  workflow_dispatch:        # Ou manualmente
+
+permissions:
+  contents: write
+
+jobs:
+  auto-install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.PAT_TOKEN }}
+
+      - name: Detectar e instalar em repos novos
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.PAT_TOKEN }}
+          script: |
+            const fs = require('fs');
+
+            const config = JSON.parse(fs.readFileSync('repos.json', 'utf8'));
+            const owner = config.owner;
+            const knownRepos = new Set(config.repos.map(r => r.name));
+
+            // Workflows para instalar
+            const workflows = [
+              {
+                local: 'coderabbit-linear-issue.yml',
+                remote: '.github/workflows/coderabbit-linear-issue.yml',
+              },
+              {
+                local: 'linear-lifecycle.yml',
+                remote: '.github/workflows/linear-lifecycle.yml',
+              },
+            ];
+
+            // Repos para ignorar (este repo, forks, archived)
+            const IGNORE_REPOS = new Set([
+              'coderabbit-linear-setup',
+            ]);
+
+            // ─── 1. Listar todos os repos da conta ──────────────────
+            let allRepos = [];
+            let page = 1;
+
+            while (true) {
+              const { data: repos } = await github.rest.repos.listForAuthenticatedUser({
+                per_page: 100,
+                page,
+                sort: 'created',
+                direction: 'desc',
+                affiliation: 'owner',
+              });
+
+              if (repos.length === 0) break;
+              allRepos = allRepos.concat(repos);
+              if (repos.length < 100) break;
+              page++;
+            }
+
+            core.info(`Total de repos encontrados: ${allRepos.length}`);
+            core.info(`Repos já conhecidos: ${knownRepos.size}`);
+
+            // ─── 2. Filtrar repos novos ──────────────────────────────
+            const newRepos = allRepos.filter(r =>
+              !knownRepos.has(r.name) &&
+              !IGNORE_REPOS.has(r.name) &&
+              !r.fork &&
+              !r.archived &&
+              !r.disabled
+            );
+
+            if (newRepos.length === 0) {
+              core.info('Nenhum repo novo encontrado.');
+              return;
+            }
+
+            core.info(`Repos novos detectados: ${newRepos.map(r => r.name).join(', ')}`);
+
+            // ─── 3. Instalar workflows nos repos novos ───────────────
+            const installed = [];
+            const failed = [];
+
+            for (const repo of newRepos) {
+              core.info(`\n─── ${repo.name} ───`);
+
+              let repoInstalled = false;
+
+              for (const wf of workflows) {
+                const content = fs.readFileSync(wf.local, 'utf8');
+                const encoded = Buffer.from(content).toString('base64');
+
+                try {
+                  // Verificar se já existe
+                  let sha = null;
+                  try {
+                    const { data: existing } = await github.rest.repos.getContent({
+                      owner, repo: repo.name, path: wf.remote,
+                    });
+                    sha = existing.sha;
+                    core.info(`  ${wf.local}: já existe, atualizando...`);
+                  } catch {
+                    core.info(`  ${wf.local}: instalando...`);
+                  }
+
+                  const params = {
+                    owner, repo: repo.name, path: wf.remote,
+                    message: `ci: auto-install ${wf.local}`,
+                    content: encoded,
+                  };
+                  if (sha) params.sha = sha;
+
+                  await github.rest.repos.createOrUpdateFileContents(params);
+                  core.info(`  ${wf.local}: OK`);
+                  repoInstalled = true;
+                } catch (error) {
+                  core.error(`  ${wf.local}: FALHA — ${error.message}`);
+                }
+              }
+
+              if (repoInstalled) {
+                installed.push(repo.name);
+              } else {
+                failed.push(repo.name);
+              }
+            }
+
+            // ─── 4. Atualizar repos.json com novos repos ────────────
+            if (installed.length > 0) {
+              for (const name of installed) {
+                config.repos.push({ name, note: 'Auto-installed' });
+              }
+
+              fs.writeFileSync('repos.json', JSON.stringify(config, null, 2) + '\n');
+              core.info(`\nrepos.json atualizado com ${installed.length} novos repos`);
+            }
+
+            // Resumo
+            core.info('\n━━━ Auto-Install Completo ━━━');
+            core.info(`Instalados: ${installed.length} (${installed.join(', ') || 'nenhum'})`);
+            if (failed.length > 0) {
+              core.warning(`Falhas: ${failed.length} (${failed.join(', ')})`);
+            }
+
+            // Exportar para o próximo step
+            core.exportVariable('INSTALLED_REPOS', installed.join(','));
+            core.exportVariable('HAS_CHANGES', installed.length > 0 ? 'true' : 'false');
+
+      - name: Commit repos.json atualizado
+        if: env.HAS_CHANGES == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add repos.json
+          git commit -m "ci: auto-add repos (${{ env.INSTALLED_REPOS }})"
+          git push

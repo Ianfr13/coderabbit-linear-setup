@@ -1,0 +1,98 @@
+name: Auto-Sync Workflows to All Repos
+
+# Sempre que qualquer workflow mudar, deploya automaticamente
+# AMBOS os workflows em todos os repos listados em repos.json.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'coderabbit-linear-issue.yml'
+      - 'linear-lifecycle.yml'
+      - 'repos.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync workflows para todos os repos
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.PAT_TOKEN }}
+          script: |
+            const fs = require('fs');
+
+            const config = JSON.parse(fs.readFileSync('repos.json', 'utf8'));
+            const owner = config.owner;
+
+            // Workflows para sincronizar
+            const workflows = [
+              {
+                local: 'coderabbit-linear-issue.yml',
+                remote: '.github/workflows/coderabbit-linear-issue.yml',
+              },
+              {
+                local: 'linear-lifecycle.yml',
+                remote: '.github/workflows/linear-lifecycle.yml',
+              },
+            ];
+
+            const results = { synced: 0, upToDate: 0, failed: [] };
+
+            for (const repo of config.repos) {
+              const repoName = repo.name;
+              core.info(`\n─── ${repoName} ───`);
+
+              for (const wf of workflows) {
+                const content = fs.readFileSync(wf.local, 'utf8');
+                const encoded = Buffer.from(content).toString('base64');
+
+                try {
+                  let remoteSha = null;
+
+                  try {
+                    const { data: existing } = await github.rest.repos.getContent({
+                      owner, repo: repoName, path: wf.remote,
+                    });
+                    remoteSha = existing.sha;
+
+                    const remoteContent = Buffer.from(existing.content, 'base64').toString('utf8');
+                    if (remoteContent === content) {
+                      core.info(`  ${wf.local}: já atualizado`);
+                      results.upToDate++;
+                      continue;
+                    }
+                  } catch {
+                    core.info(`  ${wf.local}: não encontrado, criando...`);
+                  }
+
+                  const params = {
+                    owner, repo: repoName, path: wf.remote,
+                    message: `ci: auto-sync ${wf.local}`,
+                    content: encoded,
+                  };
+                  if (remoteSha) params.sha = remoteSha;
+
+                  await github.rest.repos.createOrUpdateFileContents(params);
+                  core.info(`  ${wf.local}: deployado`);
+                  results.synced++;
+                } catch (error) {
+                  core.error(`  ${wf.local}: FALHA — ${error.message}`);
+                  results.failed.push(`${repoName}/${wf.local}`);
+                }
+              }
+            }
+
+            core.info('\n━━━ Sync Completo ━━━');
+            core.info(`Deployados: ${results.synced}`);
+            core.info(`Já atualizados: ${results.upToDate}`);
+
+            if (results.failed.length > 0) {
+              core.setFailed(`Falhas: ${results.failed.join(', ')}`);
+            }
