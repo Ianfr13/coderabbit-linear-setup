@@ -10,6 +10,12 @@ on:
   issue_comment:
     types: [created, edited]
 
+# Quando CodeRabbit edita o mesmo comentário, cancela a run anterior.
+# Só a última edição (review completo) vai criar o issue.
+concurrency:
+  group: coderabbit-review-${{ github.event.issue.number }}-${{ github.event.comment.id }}
+  cancel-in-progress: true
+
 permissions:
   issues: write
   pull-requests: write
