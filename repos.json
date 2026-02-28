@@ -2,7 +2,8 @@
   "owner": "Ianfr13",
   "workflows": [
     "coderabbit-linear-issue.yml",
-    "linear-lifecycle.yml"
+    "linear-lifecycle.yml",
+    "merge-conflict-resolver.yml"
   ],
   "repos": [
     { "name": "sales-brain", "note": "Origem" },

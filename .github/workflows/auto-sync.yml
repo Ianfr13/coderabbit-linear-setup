@@ -9,6 +9,7 @@ on:
     paths:
       - 'coderabbit-linear-issue.yml'
       - 'linear-lifecycle.yml'
+      - 'merge-conflict-resolver.yml'
       - 'repos.json'
   workflow_dispatch:
 
@@ -31,17 +32,11 @@ jobs:
             const config = JSON.parse(fs.readFileSync('repos.json', 'utf8'));
             const owner = config.owner;
 
-            // Workflows para sincronizar
-            const workflows = [
-              {
-                local: 'coderabbit-linear-issue.yml',
-                remote: '.github/workflows/coderabbit-linear-issue.yml',
-              },
-              {
-                local: 'linear-lifecycle.yml',
-                remote: '.github/workflows/linear-lifecycle.yml',
-              },
-            ];
+            // Workflows para sincronizar (lê de repos.json)
+            const workflows = config.workflows.map(name => ({
+              local: name,
+              remote: `.github/workflows/${name}`,
+            }));
 
             const results = { synced: 0, upToDate: 0, failed: [] };
 
