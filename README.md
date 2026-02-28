@@ -23,7 +23,7 @@ PR avança → Issue move automaticamente → PR merged → Issue Done
 |---|---|
 | PR aberto / reaberto | In Progress |
 | Review com changes requested | In Progress |
-| Review aprovado | In Review |
+| Review aprovado | **Ready to Merge** |
 | PR merged | Done (com comentário) |
 | PR fechado sem merge | Cancelled (com motivo) |
 
@@ -61,7 +61,7 @@ O issue é criado diretamente via API com:
 - Prioridade: Urgent (score>=8), High (score>=5), Medium (score>=3)
 - Labels: baseadas nos sinais detectados (Security, Bug, Performance, etc.)
 - Projeto: atribuído automaticamente se `LINEAR_PROJECT_ID` configurado
-- Status: Triage → In Progress → In Review → Done (automático)
+- Status: Triage → In Progress → Ready to Merge → Done (automático)
 
 ## Setup (uma vez)
 
@@ -150,6 +150,6 @@ Variáveis de ambiente nos workflows:
 | Erro de permissão GitHub | Recrie `PAT_TOKEN` com Issues + PRs + Contents |
 | Erro Linear API | Verifique `LINEAR_API_KEY` e `LINEAR_TEAM_ID` nos secrets |
 | Issue não muda de status | Verifique se `linear-lifecycle.yml` está instalado no repo |
-| Status não encontrado | Os nomes dos states do Linear devem incluir "In Progress", "In Review", "Done" |
+| Status não encontrado | Os nomes dos states devem incluir "In Progress", "Ready to Merge", "Done" |
 | Auto-install não funciona | Precisa de webhook `repository` configurado (veja auto-install.yml) |
 | Labels não criando no Linear | Verifique se a API key tem permissão de criar labels no time |

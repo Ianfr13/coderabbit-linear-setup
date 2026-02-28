@@ -4,7 +4,7 @@ name: Linear Issue Lifecycle Sync
 # do issue no Linear automaticamente.
 #
 # PR opened/reopened    → In Progress
-# Review approved       → In Review
+# Review approved       → Ready to Merge
 # PR merged             → Done
 # PR closed (sem merge) → Cancelled
 
@@ -75,7 +75,7 @@ jobs:
               const reviewState = context.payload.review.state;
 
               if (reviewState === 'approved') {
-                targetState = 'in_review';
+                targetState = 'ready_to_merge';
               } else if (reviewState === 'changes_requested') {
                 targetState = 'in_progress';
               }
@@ -144,8 +144,9 @@ jobs:
               'in_progress': states.find(s => /in\s*progress/i.test(s.name))
                 || states.find(s => s.type === 'started'),
               'in_review': states.find(s => /in\s*review/i.test(s.name))
-                || states.find(s => /review/i.test(s.name))
-                || states.find(s => s.type === 'started'),
+                || states.find(s => /review/i.test(s.name)),
+              'ready_to_merge': states.find(s => /ready\s*to\s*merge/i.test(s.name))
+                || states.find(s => /ready/i.test(s.name)),
               'done': states.find(s => /done/i.test(s.name))
                 || states.find(s => /complete/i.test(s.name))
                 || states.find(s => s.type === 'completed'),
