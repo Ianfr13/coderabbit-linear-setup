@@ -6,8 +6,10 @@ Pipeline completo que conecta code reviews do CodeRabbit ao Linear com gerenciam
 
 ```
 PR aberto → CodeRabbit review → Polling até estabilizar →
-Análise por score → Labels no PR → Issue criado no Linear (Triage) →
-PR avança → Issue move automaticamente → PR merged → Issue Done
+Análise por score → Labels no PR → Issue criado no Linear (Todo) →
+Auto-Claude fix → Fix PR mergeado no branch pai →
+Re-review automático do CodeRabbit no PR pai →
+Se limpo → merge | Se tem findings → novo issue → novo ciclo
 ```
 
 ### Pipeline Completo
@@ -25,6 +27,7 @@ PR avança → Issue move automaticamente → PR merged → Issue Done
 | CodeRabbit postou review | **In Review** |
 | Review com changes requested | In Progress |
 | Review aprovado | **Ready to Merge** |
+| Fix PR mergeado | **Re-review automático** no PR pai via `@coderabbitai full review` |
 | PR merged | Done (com comentário) |
 | PR fechado sem merge | Cancelled (com motivo) |
 
@@ -135,7 +138,7 @@ Variáveis de ambiente nos workflows:
 
 ```
 ├── coderabbit-linear-issue.yml    # Workflow: review → issue no Linear
-├── linear-lifecycle.yml           # Workflow: PR events → status no Linear
+├── linear-lifecycle.yml           # Workflow: PR events → status no Linear + re-review trigger
 ├── repos.json                     # Lista de repos monitorados
 ├── scripts/
 │   └── sync.sh                    # Deploy manual via CLI
@@ -155,5 +158,6 @@ Variáveis de ambiente nos workflows:
 | Erro Linear API | Verifique `LINEAR_API_KEY` e `LINEAR_TEAM_ID` nos secrets |
 | Issue não muda de status | Verifique se `linear-lifecycle.yml` está instalado no repo |
 | Status não encontrado | Os nomes dos states devem incluir "In Progress", "Ready to Merge", "Done" |
+| CodeRabbit não re-revisa após fix | Verificar se `linear-lifecycle.yml` está instalado — job `trigger-parent-re-review` comenta `@coderabbitai full review` no PR pai |
 | Auto-install não funciona | Precisa de webhook `repository` configurado (veja auto-install.yml) |
 | Labels não criando no Linear | Verifique se a API key tem permissão de criar labels no time |
